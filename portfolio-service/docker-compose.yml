@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  portfolio-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: portfolio-service
+    ports:
+      - "8083:8083"
+    environment:
+      - PORT=8083
+      - DB_PATH=/app/data/portfolio.db
+    volumes:
+      # Монтируем директорию для базы данных
+      - ./data:/app/data
+    networks:
+      - microservices-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8083/api/portfolio"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  microservices-network:
+    driver: bridge
+

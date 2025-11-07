@@ -1,0 +1,24 @@
+2025/11/06 19:39:52 ✅ Config loaded: PORT=8080 | TTL=60 min | DB=auth.db
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] POST   /api/v1/register          --> auth-service/handlers.(*AuthHandler).Register-fm (3 handlers)
+[GIN-debug] POST   /api/v1/login             --> auth-service/handlers.(*AuthHandler).Login-fm (3 handlers)
+[GIN-debug] GET    /api/v1/internal/users/:id --> auth-service/handlers.(*UserHandler).GetUserInternal-fm (3 handlers)
+[GIN-debug] GET    /api/v1/internal/users/:id/role --> auth-service/handlers.(*UserHandler).GetUserRole-fm (3 handlers)
+[GIN-debug] PATCH  /api/v1/internal/users/:id/role --> auth-service/handlers.(*UserHandler).UpdateUserRoleInternal-fm (3 handlers)
+[GIN-debug] GET    /api/v1/me                --> auth-service/handlers.(*UserHandler).GetMe-fm (4 handlers)
+[GIN-debug] GET    /api/v1/users             --> auth-service/handlers.(*UserHandler).ListUsers-fm (4 handlers)
+[GIN-debug] POST   /api/v1/users             --> auth-service/handlers.(*UserHandler).CreateUser-fm (4 handlers)
+[GIN-debug] GET    /api/v1/users/:id         --> auth-service/handlers.(*UserHandler).GetUser-fm (4 handlers)
+[GIN-debug] PUT    /api/v1/users/:id         --> auth-service/handlers.(*UserHandler).UpdateUser-fm (4 handlers)
+[GIN-debug] DELETE /api/v1/users/:id         --> auth-service/handlers.(*UserHandler).DeleteUser-fm (4 handlers)
+2025/11/06 19:39:52 Starting auth service on :8080
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on :8080
+[GIN] 2025/11/06 - 19:41:33 | 400 |    2.842541ms |             ::1 | POST     "/api/v1/register"
+signal: interrupt
