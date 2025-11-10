@@ -23,11 +23,28 @@ type UpdatePortfolioRequest struct {
 	ImageURL    *string `json:"image_url"`
 }
 
-func RegisterPortfolioRoutes(r *gin.Engine) {
-	api := r.Group("/api/portfolio")
+func RegisterPortfolioRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, adminMiddleware gin.HandlerFunc) {
+	// Public routes
+	public := r.Group("/api/portfolio")
+	public.GET("", func(c *gin.Context) {
+		var items []models.Portfolio
+		if err := db.DB.Order("created_at desc").Find(&items).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list"})
+			return
+		}
+		c.JSON(http.StatusOK, items)
+	})
 
-	// Create
-	api.POST("", func(c *gin.Context) {
+	// Protected routes (require authentication)
+	api := r.Group("/api/portfolio")
+	api.Use(authMiddleware)
+
+	// Admin-only routes
+	admin := r.Group("/api/portfolio")
+	admin.Use(authMiddleware, adminMiddleware)
+
+	// Create (admin only)
+	admin.POST("", func(c *gin.Context) {
 		var req CreatePortfolioRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -55,18 +72,8 @@ func RegisterPortfolioRoutes(r *gin.Engine) {
 		c.JSON(http.StatusCreated, p)
 	})
 
-	// List
-	api.GET("", func(c *gin.Context) {
-		var items []models.Portfolio
-		if err := db.DB.Order("created_at desc").Find(&items).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list"})
-			return
-		}
-		c.JSON(http.StatusOK, items)
-	})
-
-	// Update
-	api.PATCH("/:id", func(c *gin.Context) {
+	// Update (admin only)
+	admin.PATCH("/:id", func(c *gin.Context) {
 		id, _ := strconv.Atoi(c.Param("id"))
 		var req UpdatePortfolioRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -104,8 +111,8 @@ func RegisterPortfolioRoutes(r *gin.Engine) {
 		c.JSON(http.StatusOK, p)
 	})
 
-	// Delete
-	api.DELETE("/:id", func(c *gin.Context) {
+	// Delete (admin only)
+	admin.DELETE("/:id", func(c *gin.Context) {
 		id, _ := strconv.Atoi(c.Param("id"))
 
 		if err := db.DB.Delete(&models.Portfolio{}, id).Error; err != nil {

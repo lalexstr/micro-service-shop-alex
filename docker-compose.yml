@@ -1,0 +1,172 @@
+version: '3.8'
+
+services:
+  # Auth Service - должен запуститься первым
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-here}
+      - JWT_TTL_MINUTES=${JWT_TTL_MINUTES:-60}
+      - SQLITE_PATH=/app/data/auth.db
+    volumes:
+      - ./auth-service/data:/app/data
+    networks:
+      - microservices-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/v1/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # User Service
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    container_name: user-service
+    ports:
+      - "8085:8085"
+    environment:
+      - PORT=8085
+      - DB_PATH=/app/data/user.db
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-here}
+      - AUTH_SERVICE_URL=http://auth-service:8080
+    volumes:
+      - ./user-service/data:/app/data
+    networks:
+      - microservices-network
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8085/api/users"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Product Service
+  product-service:
+    build:
+      context: ./product-service
+      dockerfile: Dockerfile
+    container_name: product-service
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+      - DB_PATH=/app/data/product.db
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-here}
+      - AUTH_SERVICE_URL=http://auth-service:8080
+    volumes:
+      - ./product-service/data:/app/data
+    networks:
+      - microservices-network
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/api/products"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Project Service
+  project-service:
+    build:
+      context: ./project-service
+      dockerfile: Dockerfile
+    container_name: project-service
+    ports:
+      - "8082:8082"
+    environment:
+      - PORT=8082
+      - DB_PATH=/app/data/project.db
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-here}
+      - AUTH_SERVICE_URL=http://auth-service:8080
+    volumes:
+      - ./project-service/data:/app/data
+    networks:
+      - microservices-network
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8082/api/projects"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Portfolio Service
+  portfolio-service:
+    build:
+      context: ./portfolio-service
+      dockerfile: Dockerfile
+    container_name: portfolio-service
+    ports:
+      - "8083:8083"
+    environment:
+      - PORT=8083
+      - DB_PATH=/app/data/portfolio.db
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-here}
+      - AUTH_SERVICE_URL=http://auth-service:8080
+    volumes:
+      - ./portfolio-service/data:/app/data
+    networks:
+      - microservices-network
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8083/api/portfolio"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Contact Service
+  contact-service:
+    build:
+      context: ./contact-service
+      dockerfile: Dockerfile
+    container_name: contact-service
+    ports:
+      - "8084:8084"
+    environment:
+      - PORT=8084
+      - DB_PATH=/app/data/contact.db
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-here}
+      - AUTH_SERVICE_URL=http://auth-service:8080
+    volumes:
+      - ./contact-service/data:/app/data
+    networks:
+      - microservices-network
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8084/api/contact"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  microservices-network:
+    driver: bridge
+

@@ -4,15 +4,18 @@ FROM golang:1.21-alpine AS builder
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Копируем go mod файлы
-COPY go.mod go.sum ./
-RUN go mod download
-
 # Копируем весь код проекта
 COPY . .
 
+# Инициализируем go.mod если его нет и устанавливаем зависимости
+RUN if [ ! -f go.mod ]; then \
+      go mod init ooolalex/contact-service; \
+    fi && \
+    go mod tidy && \
+    go mod download
+
 # Собираем приложение (CGO нужен для SQLite)
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o portfolio-service ./main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o contact-service ./cmd/main.go
 
 # Final stage
 FROM alpine:latest
@@ -23,16 +26,14 @@ RUN apk --no-cache add ca-certificates sqlite wget
 WORKDIR /app
 
 # Копируем бинарный файл из builder stage
-COPY --from=builder /app/portfolio-service .
+COPY --from=builder /app/contact-service .
 
 # Создаем директорию для базы данных
 RUN mkdir -p /app/data
 
 # Указываем порт
-EXPOSE 8083
+EXPOSE 8084
 
 # Запускаем приложение
-CMD ["./portfolio-service"]
-
-
+CMD ["./contact-service"]
 

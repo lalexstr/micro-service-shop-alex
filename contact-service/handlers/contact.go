@@ -21,7 +21,8 @@ type updateStatusRequest struct {
 	AdminID *uint                `json:"admin_id"`
 }
 
-func RegisterContactRoutes(r *gin.Engine, cfg *config.Config) {
+func RegisterContactRoutes(r *gin.Engine, cfg *config.Config, authMiddleware gin.HandlerFunc, adminMiddleware gin.HandlerFunc) {
+	// Public route - anyone can create contact request
 	r.POST("api/contact-requests", func(c *gin.Context) {
 		var req createContactRequest
 		if err := c.ShouldBindJSON(&req); err != nil || req.Contact == "" {
@@ -49,7 +50,9 @@ func RegisterContactRoutes(r *gin.Engine, cfg *config.Config) {
 		c.JSON(http.StatusOK, gin.H{"message": "Ваш запрос успешно отправлен! Мы свяжемся с вами в ближайшее время."})
 	})
 
+	// Admin routes - require authentication and admin role
 	admin := r.Group("/api/contact-requests/admin")
+	admin.Use(authMiddleware, adminMiddleware)
 
 	admin.GET("", func(c *gin.Context) {
 		var items []models.ContactRequest
@@ -71,6 +74,15 @@ func RegisterContactRoutes(r *gin.Engine, cfg *config.Config) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
+
+		// Get userID from context (set by auth middleware)
+		userIDRaw, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+			return
+		}
+		userID := userIDRaw.(uint)
+		req.AdminID = &userID
 
 		var cr models.ContactRequest
 		if err := db.DB.First(&cr, id).Error; err != nil {
@@ -98,6 +110,15 @@ func RegisterContactRoutes(r *gin.Engine, cfg *config.Config) {
 
 	admin.DELETE(":id", func(c *gin.Context) {
 		id, _ := strconv.Atoi(c.Param("id"))
+		
+		// Get userID from context (set by auth middleware)
+		userIDRaw, exists := c.Get("userID")
+		var userID *uint
+		if exists {
+			uid := userIDRaw.(uint)
+			userID = &uid
+		}
+
 		if err := db.DB.Delete(&models.ContactRequest{}, id).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed"})
 			return
@@ -105,6 +126,7 @@ func RegisterContactRoutes(r *gin.Engine, cfg *config.Config) {
 
 		// ✅ Логируем удаление
 		db.DB.Create(&models.Log{
+			UserID:    userID,
 			Action:    "delete_contact_request",
 			Message:   "Deleted contact_request id=" + strconv.Itoa(id),
 			Timestamp: time.Now(),

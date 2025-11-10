@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"portfolio-service/config"
 	"portfolio-service/db"
 	"portfolio-service/routes"
 
@@ -10,7 +11,13 @@ import (
 )
 
 func main() {
-	db.InitDB("./portfolio.db")
+	cfg := config.LoadConfig()
+	
+	if cfg.DBPath == "" {
+		cfg.DBPath = "./portfolio.db"
+	}
+	
+	db.InitDB(cfg.DBPath)
 
 	r := gin.Default()
 	routes.SetupRoutes(r)

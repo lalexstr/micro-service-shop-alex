@@ -1,13 +1,28 @@
 package config
 
-import "os"
+import (
+	"log"
+	"os"
+)
 
 type Config struct {
-	DBPath string
+	DBPath    string
+	JWTSecret string
 }
 
 func LoadConfig() Config {
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "./portfolio.db"
+	}
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET not set")
+	}
+
 	return Config{
-		DBPath: os.Getenv("DB_PATH"),
+		DBPath:    dbPath,
+		JWTSecret: jwtSecret,
 	}
 }
