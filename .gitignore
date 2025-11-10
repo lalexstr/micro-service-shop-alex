@@ -1,0 +1,63 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+auth-service/auth-service
+user-service/user-service
+product-service/product-service
+project-service/project-service
+portfolio-service/portfolio-service
+contact-service/contact-service
+
+# Data directories (optional - uncomment if you don't want to track DB files)
+# auth-service/data/
+# user-service/data/
+# product-service/data/
+# project-service/data/
+# portfolio-service/data/
+# contact-service/data/
+

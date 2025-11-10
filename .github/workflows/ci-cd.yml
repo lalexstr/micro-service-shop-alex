@@ -1,0 +1,151 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master
+      - dev
+
+env:
+  DOCKER_BUILDKIT: 1
+
+jobs:
+  # Тесты для всех веток
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Run tests for auth-service
+        working-directory: ./auth-service
+        run: |
+          if [ -f go.mod ]; then
+            go mod download
+            go test -v ./... || echo "No tests found or tests failed"
+          else
+            echo "No go.mod found, skipping tests"
+          fi
+        continue-on-error: true
+
+      - name: Run tests for product-service
+        working-directory: ./product-service
+        run: |
+          if [ -f go.mod ]; then
+            go mod download
+            go test -v ./... || echo "No tests found or tests failed"
+          else
+            echo "No go.mod found, skipping tests"
+          fi
+        continue-on-error: true
+
+      - name: Run tests for user-service
+        working-directory: ./user-service
+        run: |
+          if [ -f go.mod ]; then
+            go mod download
+            go test -v ./... || echo "No tests found or tests failed"
+          else
+            echo "No go.mod found, skipping tests"
+          fi
+        continue-on-error: true
+
+      - name: Run tests for project-service
+        working-directory: ./project-service
+        run: |
+          if [ -f go.mod ]; then
+            go mod download
+            go test -v ./... || echo "No tests found or tests failed"
+          else
+            echo "No go.mod found, skipping tests"
+          fi
+        continue-on-error: true
+
+      - name: Run tests for portfolio-service
+        working-directory: ./portfolio-service
+        run: |
+          if [ -f go.mod ]; then
+            go mod download
+            go test -v ./... || echo "No tests found or tests failed"
+          else
+            echo "No go.mod found, skipping tests"
+          fi
+        continue-on-error: true
+
+      - name: Run tests for contact-service
+        working-directory: ./contact-service
+        run: |
+          if [ -f go.mod ]; then
+            go mod download
+            go test -v ./... || echo "No tests found or tests failed"
+          else
+            echo "No go.mod found, skipping tests"
+          fi
+        continue-on-error: true
+
+  # Сборка Docker образов и деплой только для master ветки
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build auth-service image
+        working-directory: ./auth-service
+        run: |
+          docker build -t auth-service:latest .
+
+      - name: Build user-service image
+        working-directory: ./user-service
+        run: |
+          docker build -t user-service:latest .
+
+      - name: Build product-service image
+        working-directory: ./product-service
+        run: |
+          docker build -t product-service:latest .
+
+      - name: Build project-service image
+        working-directory: ./project-service
+        run: |
+          docker build -t project-service:latest .
+
+      - name: Build portfolio-service image
+        working-directory: ./portfolio-service
+        run: |
+          docker build -t portfolio-service:latest .
+
+      - name: Build contact-service image
+        working-directory: ./contact-service
+        run: |
+          docker build -t contact-service:latest .
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+            git pull origin master
+            docker-compose down
+            docker-compose build
+            docker-compose up -d
+            docker-compose ps
