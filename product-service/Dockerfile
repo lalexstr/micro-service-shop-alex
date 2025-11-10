@@ -29,7 +29,7 @@ RUN apk --no-cache add ca-certificates sqlite wget
 WORKDIR /app
 
 # Копируем бинарный файл из builder stage
-COPY --from=builder /app/project-service .
+COPY --from=builder /app/product-service .
 
 # Копируем .env файл (если нужен)
 # COPY .env .env
@@ -38,8 +38,8 @@ COPY --from=builder /app/project-service .
 RUN mkdir -p /app/data
 
 # Указываем порт
-EXPOSE 8082
+EXPOSE 8081
 
 # Запускаем приложение
-CMD ["./project-service"]
+CMD ["./product-service"]
 
