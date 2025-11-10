@@ -17,8 +17,8 @@ RUN if [ ! -f go.mod ]; then \
     go mod tidy && \
     go mod download
 
-# Собираем приложение (CGO нужен для SQLite)
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o project-service ./main.go
+# Обновляем зависимости и собираем приложение (CGO нужен для SQLite)
+RUN go mod tidy && CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o project-service ./main.go
 
 # Final stage
 FROM alpine:latest

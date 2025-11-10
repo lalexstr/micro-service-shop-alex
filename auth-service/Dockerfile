@@ -14,8 +14,8 @@ RUN go mod download
 # Копируем весь код проекта
 COPY . .
 
-# Собираем приложение (CGO нужен для SQLite)
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o auth-service ./main.go
+# Обновляем зависимости и собираем приложение (CGO нужен для SQLite)
+RUN go mod tidy && CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o auth-service ./main.go
 
 # Final stage
 FROM alpine:latest
