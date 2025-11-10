@@ -145,7 +145,7 @@ jobs:
           passphrase: ${{ secrets.DEPLOY_SSH_PASSPHRASE }}
           port: 22
           timeout: 30s
-          command_timeout: 10m
+          command_timeout: 30m
           script: |
             DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
             if [ -z "$DEPLOY_PATH" ]; then
@@ -173,8 +173,15 @@ jobs:
             # Обновляем код
             git pull origin master || git fetch origin && git reset --hard origin/master
             
-            # Запускаем docker-compose
+            # Запускаем docker-compose с оптимизацией
             docker-compose down || true
-            docker-compose build
+            
+            # Собираем образы с использованием BuildKit и кэша
+            echo "Building Docker images (this may take 10-15 minutes on first run)..."
+            DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker-compose build --parallel || docker-compose build
+            
+            echo "Starting containers..."
             docker-compose up -d
+            
+            echo "Container status:"
             docker-compose ps
