@@ -7,15 +7,12 @@ WORKDIR /app
 # Устанавливаем C компилятор для CGO (нужен для SQLite)
 RUN apk add --no-cache gcc musl-dev
 
+# Копируем go mod файлы
+COPY go.mod go.sum ./
+RUN go mod download
+
 # Копируем весь код проекта
 COPY . .
-
-# Инициализируем go.mod если его нет и устанавливаем зависимости
-RUN if [ ! -f go.mod ]; then \
-      go mod init ooolalex/contact-service; \
-    fi && \
-    go mod tidy && \
-    go mod download
 
 # Обновляем зависимости и собираем приложение (CGO нужен для SQLite)
 RUN go mod tidy && CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o contact-service ./cmd/main.go
