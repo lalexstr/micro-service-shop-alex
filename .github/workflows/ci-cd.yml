@@ -147,9 +147,34 @@ jobs:
           timeout: 30s
           command_timeout: 10m
           script: |
-            cd ${{ secrets.DEPLOY_PATH }}
-            git pull origin master
-            docker-compose down
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+            if [ -z "$DEPLOY_PATH" ]; then
+              echo "Error: DEPLOY_PATH is not set in GitHub Secrets"
+              exit 1
+            fi
+            
+            # Создаем директорию, если её нет
+            if [ ! -d "$DEPLOY_PATH" ]; then
+              echo "Creating directory $DEPLOY_PATH..."
+              mkdir -p "$DEPLOY_PATH"
+            fi
+            
+            cd "$DEPLOY_PATH" || exit 1
+            
+            # Инициализируем git репозиторий, если его нет
+            if [ ! -d ".git" ]; then
+              echo "Initializing git repository..."
+              git init
+              git remote add origin https://github.com/${{ github.repository }}.git || git remote set-url origin https://github.com/${{ github.repository }}.git
+              git fetch origin
+              git checkout -b master origin/master || git checkout master
+            fi
+            
+            # Обновляем код
+            git pull origin master || git fetch origin && git reset --hard origin/master
+            
+            # Запускаем docker-compose
+            docker-compose down || true
             docker-compose build
             docker-compose up -d
             docker-compose ps
