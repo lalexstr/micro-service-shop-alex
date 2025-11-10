@@ -115,10 +115,47 @@ CI/CD pipeline настроен в `.github/workflows/ci-cd.yml`:
 
 Для работы CI/CD необходимо настроить следующие секреты в GitHub (Settings → Secrets and variables → Actions):
 
-- `DEPLOY_HOST` - IP адрес или домен сервера для деплоя
-- `DEPLOY_USER` - пользователь для SSH подключения
-- `DEPLOY_SSH_KEY` - приватный SSH ключ для подключения к серверу
-- `DEPLOY_PATH` - путь на сервере, куда будет развернут проект
+- `DEPLOY_HOST` - IP адрес или домен сервера для деплоя (например: `192.168.1.100` или `example.com`)
+- `DEPLOY_USER` - пользователь для SSH подключения (например: `root` или `deploy`)
+- `DEPLOY_SSH_KEY` - **приватный** SSH ключ для подключения к серверу (см. инструкцию ниже)
+- `DEPLOY_PATH` - путь на сервере, куда будет развернут проект (например: `/opt/microservices`)
+
+#### ⚠️ Важно: Настройка SSH ключей
+
+**Проблема:** Если вы видите ошибку `ssh: no key found`, значит в GitHub Secrets добавлен публичный ключ вместо приватного.
+
+**Решение:**
+
+1. **Найдите приватный SSH ключ на вашем компьютере:**
+   ```bash
+   # Обычно находится в ~/.ssh/id_rsa или ~/.ssh/id_ed25519
+   cat ~/.ssh/id_rsa
+   # или
+   cat ~/.ssh/id_ed25519
+   ```
+
+2. **Скопируйте ВЕСЬ приватный ключ** (он начинается с `-----BEGIN OPENSSH PRIVATE KEY-----` или `-----BEGIN RSA PRIVATE KEY-----` и заканчивается `-----END ... KEY-----`)
+
+3. **Добавьте приватный ключ в GitHub Secrets:**
+   - Перейдите в Settings → Secrets and variables → Actions
+   - Создайте или обновите секрет `DEPLOY_SSH_KEY`
+   - Вставьте **весь** приватный ключ (включая строки `-----BEGIN` и `-----END`)
+
+4. **Добавьте публичный ключ на сервер:**
+   ```bash
+   # На сервере выполните:
+   mkdir -p ~/.ssh
+   chmod 700 ~/.ssh
+   
+   # Добавьте публичный ключ в authorized_keys
+   echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIESj5fHpsGmFGtYTI++Y2PZ8Z6jq2CvCi2hUEiSob7nM alexstroilov2007@icloud.com" >> ~/.ssh/authorized_keys
+   chmod 600 ~/.ssh/authorized_keys
+   ```
+
+5. **Проверьте подключение:**
+   ```bash
+   ssh -i ~/.ssh/id_rsa user@your-server-ip
+   ```
 
 ### Локальный запуск тестов
 
