@@ -12,13 +12,13 @@ COPY . .
 
 # Инициализируем go.mod если его нет и устанавливаем зависимости
 RUN if [ ! -f go.mod ]; then \
-      go mod init ooolalex/project-service; \
+      go mod init ooolalex/product-service; \
     fi && \
     go mod tidy && \
     go mod download
 
 # Обновляем зависимости и собираем приложение (CGO нужен для SQLite)
-RUN go mod tidy && CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o project-service ./main.go
+RUN go mod tidy && CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o product-service ./main.go
 
 # Final stage
 FROM alpine:latest
