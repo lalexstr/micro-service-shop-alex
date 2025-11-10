@@ -31,7 +31,6 @@ go.work
 
 # Logs
 *.log
-logs/
 
 # Database files
 *.db
