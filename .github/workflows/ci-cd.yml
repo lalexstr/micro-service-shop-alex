@@ -136,19 +136,12 @@ jobs:
         run: |
           docker build -t contact-service:latest .
 
-      - name: Setup SSH key
-        run: |
-          mkdir -p .ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > .ssh/deploy_key
-          chmod 600 .ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> .ssh/known_hosts 2>/dev/null || true
-
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
-          key_path: ${{ github.workspace }}/.ssh/deploy_key
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: 22
           timeout: 30s
           command_timeout: 10m
