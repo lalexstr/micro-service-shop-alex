@@ -5,8 +5,15 @@ FROM golang:1.24-alpine AS builder
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
+# Настраиваем быстрые зеркала Alpine перед установкой пакетов
+RUN echo "http://mirrors.edge.kernel.org/alpine/v3.22/main" > /etc/apk/repositories && \
+    echo "http://mirrors.edge.kernel.org/alpine/v3.22/community" >> /etc/apk/repositories && \
+    echo "http://dl-cdn.alpinelinux.org/alpine/v3.22/main" >> /etc/apk/repositories && \
+    echo "http://dl-cdn.alpinelinux.org/alpine/v3.22/community" >> /etc/apk/repositories
+
 # Устанавливаем C компилятор для CGO (нужен для SQLite)
-RUN apk add --no-cache gcc musl-dev
+RUN apk update --no-cache && \
+    apk add --no-cache gcc musl-dev
 
 # Копируем go mod файлы
 COPY go.mod go.sum ./
@@ -27,8 +34,15 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # Final stage
 FROM alpine:latest
 
+# Настраиваем быстрые зеркала Alpine
+RUN echo "http://mirrors.edge.kernel.org/alpine/v3.22/main" > /etc/apk/repositories && \
+    echo "http://mirrors.edge.kernel.org/alpine/v3.22/community" >> /etc/apk/repositories && \
+    echo "http://dl-cdn.alpinelinux.org/alpine/v3.22/main" >> /etc/apk/repositories && \
+    echo "http://dl-cdn.alpinelinux.org/alpine/v3.22/community" >> /etc/apk/repositories
+
 # Устанавливаем необходимые пакеты для SQLite и wget для healthcheck
-RUN apk --no-cache add ca-certificates sqlite wget
+RUN apk update --no-cache && \
+    apk add --no-cache ca-certificates sqlite wget
 
 WORKDIR /app
 
@@ -43,6 +57,3 @@ EXPOSE 8080
 
 # Запускаем приложение
 CMD ["./auth-service"]
-
-
-
