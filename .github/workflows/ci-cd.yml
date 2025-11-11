@@ -280,11 +280,24 @@ jobs:
           
           ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes deploy-server << ENDSSH
             set -e
+            
+            echo "📂 Переход в директорию: \${DEPLOY_PATH}"
+            mkdir -p \${DEPLOY_PATH}
             cd \${DEPLOY_PATH}
             
             echo "📂 Текущая директория: \$(pwd)"
             echo "📋 Содержимое директории:"
             ls -la
+            
+            # Проверяем, является ли директория git репозиторием
+            if [ ! -d .git ]; then
+              echo "❌ Директория не является git репозиторием. Клонирую репозиторий..."
+              cd ..
+              rm -rf \$(basename \${DEPLOY_PATH}) || true
+              git clone https://github.com/${GITHUB_REPO}.git \${DEPLOY_PATH}
+              cd \${DEPLOY_PATH}
+              git checkout master || git checkout main
+            fi
             
             # Проверяем наличие docker-compose.yml
             if [ ! -f docker-compose.yml ]; then
@@ -356,6 +369,8 @@ jobs:
           
           ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes deploy-server << ENDSSH
             set -e
+            
+            echo "📂 Переход в директорию: \${DEPLOY_PATH}"
             cd \${DEPLOY_PATH}
             
             echo "📂 Текущая директория: \$(pwd)"
@@ -363,6 +378,8 @@ jobs:
             # Проверяем наличие docker-compose.yml
             if [ ! -f docker-compose.yml ]; then
               echo "❌ Файл docker-compose.yml не найден в \$(pwd)"
+              echo "🔍 Поиск docker-compose.yml..."
+              find . -name "docker-compose.yml" -type f 2>/dev/null || echo "Файл не найден"
               exit 1
             fi
             
