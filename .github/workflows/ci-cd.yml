@@ -188,7 +188,9 @@ jobs:
             if [ -n "$LAST_COMMIT" ] || [ -z "$LAST_COMMIT" ]; then
               # Используем test с || true чтобы всегда возвращать успех
               if test -n "$LAST_COMMIT" || true; then
-                if test -n "$LAST_COMMIT"; then
+                # Внутренняя проверка тоже с || true
+                if test -n "$LAST_COMMIT" || true; then
+                  if test -n "$LAST_COMMIT"; then
                   CURRENT_COMMIT=$(git rev-parse HEAD)
                   echo "Last deploy commit: $LAST_COMMIT"
                   echo "Current commit: $CURRENT_COMMIT"
@@ -208,9 +210,10 @@ jobs:
                       fi
                     done
                   fi
-                else
-                  echo "First deployment, will build all services"
-                  CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
+                  else
+                    echo "First deployment, will build all services"
+                    CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
+                  fi
                 fi
               fi
             else
