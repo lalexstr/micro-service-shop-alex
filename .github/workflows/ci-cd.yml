@@ -1,63 +1,63 @@
 name: CI/CD Pipeline
 
 on:
-push:
-branches:
-- master
-- dev
-pull_request:
-branches:
-- master
-- dev
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master
+      - dev
 
 env:
-DOCKER_BUILDKIT: 1
+  DOCKER_BUILDKIT: 1
 
 jobs:
-test:
-name: Run Tests
-runs-on: ubuntu-latest
-steps:
-- uses: actions/checkout@v4
-- uses: actions/setup-go@v5
-with:
-go-version: '1.24'
-- name: Run tests for all Go services
-run: |
-for service in auth-service product-service user-service project-service portfolio-service contact-service; do
-echo "Running tests for $service..."
-if [ -f "$service/go.mod" ]; then
-cd "$service"
-go mod download
-go test -v ./... || echo "No tests found or failed in $service"
-cd ..
-else
-echo "No go.mod in $service, skipping"
-fi
-done
-continue-on-error: true
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Run tests for all Go services
+        run: |
+          for service in auth-service product-service user-service project-service portfolio-service contact-service; do
+            echo "Running tests for $service..."
+            if [ -f "$service/go.mod" ]; then
+              cd "$service"
+              go mod download
+              go test -v ./... || echo "No tests found or failed in $service"
+              cd ..
+            else
+              echo "No go.mod in $service, skipping"
+            fi
+          done
+        continue-on-error: true
 
-build-and-deploy:
-name: Build and Deploy
-runs-on: ubuntu-latest
-needs: test
-if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-steps:
-  - uses: actions/checkout@v4
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
 
-  - name: Deploy to server via SSH
-    uses: appleboy/ssh-action@v1.2.0
-    with:
-      host: ${{ secrets.DEPLOY_HOST }}
-      username: ${{ secrets.DEPLOY_USER }}
-      key: ${{ secrets.DEPLOY_SSH_KEY }}
-      port: 22
-      timeout: 120s
-      command_timeout: 180m
-      script_stop: true
-      debug: true
-      envs: "SSH_CLIENT_ALIVE_INTERVAL=60 SSH_CLIENT_ALIVE_COUNT_MAX=120 GOMAXPROCS=2"
-      script: |
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 22
+          timeout: 120s
+          command_timeout: 180m
+          script_stop: true
+          debug: true
+          envs: "SSH_CLIENT_ALIVE_INTERVAL=60 SSH_CLIENT_ALIVE_COUNT_MAX=120 GOMAXPROCS=2"
+          script: |
         set -x
         DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
         mkdir -p "$DEPLOY_PATH"
@@ -91,15 +91,14 @@ steps:
           if [ "$LAST_COMMIT" != "$CURRENT_COMMIT" ]; then
             for service in auth-service user-service product-service project-service portfolio-service contact-service; do
               # git diff --quiet возвращает 0 если нет изменений, 1 если есть изменения
-              # Обертываем в || true чтобы не вызывать ошибку
-              if git diff --quiet "$LAST_COMMIT" HEAD -- "$service/" 2>/dev/null || true; then
-                # Проверяем реальный код выхода через $?
-                if git diff --quiet "$LAST_COMMIT" HEAD -- "$service/" 2>/dev/null; then
-                  echo "$service: no changes"
-                else
-                  echo "$service: changed"
-                  CHANGED_SERVICES="$CHANGED_SERVICES $service"
-                fi
+              # Сохраняем код выхода в переменную, чтобы не вызывать ошибку SSH action
+              git diff --quiet "$LAST_COMMIT" HEAD -- "$service/" 2>/dev/null
+              DIFF_EXIT_CODE=$?
+              if [ $DIFF_EXIT_CODE -eq 0 ]; then
+                echo "$service: no changes"
+              else
+                echo "$service: changed"
+                CHANGED_SERVICES="$CHANGED_SERVICES $service"
               fi
             done
           else
