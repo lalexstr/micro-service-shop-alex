@@ -174,33 +174,31 @@ jobs:
             CHANGED_SERVICES=""
             
             # Проверяем наличие файла с последним коммитом
-            # Используем конструкцию, которая всегда возвращает успех
-            if ls ".last_deploy_commit" >/dev/null 2>&1 || [ ! -f ".last_deploy_commit" ]; then
-              # Файл существует, читаем его
-              if [ -f ".last_deploy_commit" ]; then
-                LAST_COMMIT=$(cat .last_deploy_commit)
-                CURRENT_COMMIT=$(git rev-parse HEAD)
-                echo "Last deploy commit: $LAST_COMMIT"
-                echo "Current commit: $CURRENT_COMMIT"
-                
-                if [ "$LAST_COMMIT" != "$CURRENT_COMMIT" ]; then
-                  echo "Code changed, will rebuild all services"
-                  CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
-                else
-                  echo "No code changes detected, checking individual services..."
-                  # Проверяем изменения в каждом сервисе
-                  for service in auth-service user-service product-service project-service portfolio-service contact-service; do
-                    if git diff --quiet "$LAST_COMMIT" HEAD -- "$service/" 2>/dev/null; then
-                      echo "  $service: no changes"
-                    else
-                      echo "  $service: changed"
-                      CHANGED_SERVICES="$CHANGED_SERVICES $service"
-                    fi
-                  done
-                fi
-              else
-                echo "First deployment, will build all services"
+            # Пробуем прочитать файл, если не получается - это первый деплой
+            LAST_COMMIT=""
+            if [ -f ".last_deploy_commit" ] 2>/dev/null; then
+              LAST_COMMIT=$(cat .last_deploy_commit 2>/dev/null || echo "")
+            fi
+            
+            if [ -n "$LAST_COMMIT" ]; then
+              CURRENT_COMMIT=$(git rev-parse HEAD)
+              echo "Last deploy commit: $LAST_COMMIT"
+              echo "Current commit: $CURRENT_COMMIT"
+              
+              if [ "$LAST_COMMIT" != "$CURRENT_COMMIT" ]; then
+                echo "Code changed, will rebuild all services"
                 CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
+              else
+                echo "No code changes detected, checking individual services..."
+                # Проверяем изменения в каждом сервисе
+                for service in auth-service user-service product-service project-service portfolio-service contact-service; do
+                  if git diff --quiet "$LAST_COMMIT" HEAD -- "$service/" 2>/dev/null; then
+                    echo "  $service: no changes"
+                  else
+                    echo "  $service: changed"
+                    CHANGED_SERVICES="$CHANGED_SERVICES $service"
+                  fi
+                done
               fi
             else
               echo "First deployment, will build all services"
