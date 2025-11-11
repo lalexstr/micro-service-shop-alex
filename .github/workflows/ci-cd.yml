@@ -278,10 +278,12 @@ jobs:
             }
           EXPECT_SCRIPT
           
-          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes deploy-server << 'ENDSSH'
-            cd ${DEPLOY_PATH}
+          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes deploy-server << ENDSSH
+            set -e
+            cd \${DEPLOY_PATH}
             
             # Определяем команду docker compose
+            DOCKER_COMPOSE_CMD=""
             if command -v docker-compose &> /dev/null; then
               DOCKER_COMPOSE_CMD="docker-compose"
             elif docker compose version &> /dev/null; then
@@ -291,6 +293,7 @@ jobs:
               exit 1
             fi
             
+            echo "✅ Используется команда: \$DOCKER_COMPOSE_CMD"
             echo "🔨 Сборка Docker образов..."
             \$DOCKER_COMPOSE_CMD build --no-cache
           ENDSSH
@@ -339,10 +342,12 @@ jobs:
             }
           EXPECT_SCRIPT
           
-          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes deploy-server << 'ENDSSH'
-            cd ${DEPLOY_PATH}
+          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes deploy-server << ENDSSH
+            set -e
+            cd \${DEPLOY_PATH}
             
             # Определяем команду docker compose
+            DOCKER_COMPOSE_CMD=""
             if command -v docker-compose &> /dev/null; then
               DOCKER_COMPOSE_CMD="docker-compose"
             elif docker compose version &> /dev/null; then
@@ -352,6 +357,7 @@ jobs:
               exit 1
             fi
             
+            echo "✅ Используется команда: \$DOCKER_COMPOSE_CMD"
             echo "🚀 Запуск всех микросервисов..."
             \$DOCKER_COMPOSE_CMD up -d
             
@@ -408,10 +414,12 @@ jobs:
             }
           EXPECT_SCRIPT
           
-          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes deploy-server << 'ENDSSH'
-            cd ${DEPLOY_PATH}
+          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes deploy-server << ENDSSH
+            set -e
+            cd \${DEPLOY_PATH}
             
             # Определяем команду docker compose
+            DOCKER_COMPOSE_CMD=""
             if command -v docker-compose &> /dev/null; then
               DOCKER_COMPOSE_CMD="docker-compose"
             elif docker compose version &> /dev/null; then
