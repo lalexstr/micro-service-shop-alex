@@ -174,11 +174,8 @@ jobs:
             CHANGED_SERVICES=""
             
             # Проверяем наличие файла с последним коммитом
-            # Используем конструкцию, которая не вызывает ошибку если файла нет
-            HAS_LAST_DEPLOY=false
-            test -f ".last_deploy_commit" 2>/dev/null && HAS_LAST_DEPLOY=true || true
-            
-            if [ "$HAS_LAST_DEPLOY" = "true" ]; then
+            # Используем простую проверку с подавлением ошибок
+            if [ -f ".last_deploy_commit" ] 2>/dev/null; then
               LAST_COMMIT=$(cat .last_deploy_commit)
               CURRENT_COMMIT=$(git rev-parse HEAD)
               echo "Last deploy commit: $LAST_COMMIT"
