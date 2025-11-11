@@ -43,9 +43,8 @@ runs-on: ubuntu-latest
 needs: test
 if: github.ref == 'refs/heads/master' && github.event_name == 'push'
 steps:
-- uses: actions/checkout@v4
+  - uses: actions/checkout@v4
 
-```
   - name: Deploy to server via SSH
     uses: appleboy/ssh-action@v1.2.0
     with:
@@ -91,11 +90,16 @@ steps:
 
           if [ "$LAST_COMMIT" != "$CURRENT_COMMIT" ]; then
             for service in auth-service user-service product-service project-service portfolio-service contact-service; do
-              if git diff --quiet "$LAST_COMMIT" HEAD -- "$service/"; then
-                echo "$service: no changes"
-              else
-                echo "$service: changed"
-                CHANGED_SERVICES="$CHANGED_SERVICES $service"
+              # git diff --quiet возвращает 0 если нет изменений, 1 если есть изменения
+              # Обертываем в || true чтобы не вызывать ошибку
+              if git diff --quiet "$LAST_COMMIT" HEAD -- "$service/" 2>/dev/null || true; then
+                # Проверяем реальный код выхода через $?
+                if git diff --quiet "$LAST_COMMIT" HEAD -- "$service/" 2>/dev/null; then
+                  echo "$service: no changes"
+                else
+                  echo "$service: changed"
+                  CHANGED_SERVICES="$CHANGED_SERVICES $service"
+                fi
               fi
             done
           else
@@ -121,4 +125,3 @@ steps:
         docker compose up -d
         sleep 10
         docker compose ps
-```
