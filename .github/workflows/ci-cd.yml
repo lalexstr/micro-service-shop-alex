@@ -175,9 +175,12 @@ jobs:
             
             # Проверяем наличие файла с последним коммитом
             # Пробуем прочитать файл, если не получается - это первый деплой
+            # Используем конструкцию, которая всегда возвращает успех
             LAST_COMMIT=""
-            if [ -f ".last_deploy_commit" ] 2>/dev/null; then
-              LAST_COMMIT=$(cat .last_deploy_commit 2>/dev/null || echo "")
+            if [ -f ".last_deploy_commit" ] 2>/dev/null || [ ! -f ".last_deploy_commit" ] 2>/dev/null; then
+              if [ -f ".last_deploy_commit" ] 2>/dev/null; then
+                LAST_COMMIT=$(cat .last_deploy_commit 2>/dev/null || echo "")
+              fi
             fi
             
             if [ -n "$LAST_COMMIT" ]; then
