@@ -103,50 +103,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build auth-service image
-        working-directory: ./auth-service
-        run: |
-          docker build -t auth-service:latest .
-
-      - name: Build user-service image
-        working-directory: ./user-service
-        run: |
-          docker build -t user-service:latest .
-
-      - name: Build product-service image
-        working-directory: ./product-service
-        run: |
-          docker build -t product-service:latest .
-
-      - name: Build project-service image
-        working-directory: ./project-service
-        run: |
-          docker build -t project-service:latest .
-
-      - name: Build portfolio-service image
-        working-directory: ./portfolio-service
-        run: |
-          docker build -t portfolio-service:latest .
-
-      - name: Build contact-service image
-        working-directory: ./contact-service
-        run: |
-          docker build -t contact-service:latest .
-
       - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           passphrase: ${{ secrets.DEPLOY_SSH_PASSPHRASE }}
           port: 22
-          timeout: 30s
-          command_timeout: 60m
-          envs: SSH_CLIENT_ALIVE_INTERVAL=60,SSH_CLIENT_ALIVE_COUNT_MAX=30
+          timeout: 120s
+          command_timeout: 180m
+          script_stop: true
+          debug: true
+          envs: |
+            SSH_CLIENT_ALIVE_INTERVAL=60
+            SSH_CLIENT_ALIVE_COUNT_MAX=120
+            GOMAXPROCS=2
           script: |
             DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
             if [ -z "$DEPLOY_PATH" ]; then
@@ -174,29 +146,115 @@ jobs:
             # Обновляем код
             git pull origin master || git fetch origin && git reset --hard origin/master
             
-            # Запускаем docker-compose с оптимизацией
+            # Проверяем доступную память и место на диске
+            echo "System resources:"
+            free -h || echo "free command not available"
+            df -h / || echo "df command not available"
+            echo "Docker system info:"
+            docker system df || true
+            
+            # Останавливаем контейнеры
             docker-compose down || true
             
-            # Собираем образы (первая сборка может занять 20-30 минут)
-            echo "Building Docker images (this may take 20-30 minutes on first run)..."
-            echo "Starting build at $(date)..."
+            # Включаем BuildKit для ускорения сборки
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
             
-            # Запускаем сборку с периодическим выводом, чтобы поддерживать SSH соединение
-            docker-compose build 2>&1 | while IFS= read -r line; do
-              echo "$line"
-              # Каждые 100 строк выводим timestamp для поддержания соединения
-              if [ $((++counter % 100)) -eq 0 ]; then
-                echo "[$(date)] Still building... (processed $counter lines)"
+            # Убеждаемся, что BuildKit включен в Docker daemon
+            if ! docker buildx version > /dev/null 2>&1; then
+              echo "BuildKit not available, but continuing..."
+            fi
+            
+            # Проверяем, есть ли изменения в коде (оптимизация)
+            echo "Checking for code changes..."
+            CHANGED_SERVICES=""
+            if [ -f ".last_deploy_commit" ]; then
+              LAST_COMMIT=$(cat .last_deploy_commit)
+              CURRENT_COMMIT=$(git rev-parse HEAD)
+              if [ "$LAST_COMMIT" != "$CURRENT_COMMIT" ]; then
+                echo "Code changed, will rebuild all services"
+                CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
+              else
+                echo "No code changes detected, checking individual services..."
+                # Проверяем изменения в каждом сервисе
+                for service in auth-service user-service product-service project-service portfolio-service contact-service; do
+                  if git diff --quiet "$LAST_COMMIT" HEAD -- "$service/" 2>/dev/null; then
+                    echo "  $service: no changes"
+                  else
+                    echo "  $service: changed"
+                    CHANGED_SERVICES="$CHANGED_SERVICES $service"
+                  fi
+                done
               fi
-            done || {
-              echo "Build failed!"
-              exit 1
-            }
+            else
+              echo "First deployment, will build all services"
+              CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
+            fi
+            
+            # Собираем только измененные сервисы или все, если это первый деплой
+            if [ -n "$CHANGED_SERVICES" ]; then
+              echo "Building services: $CHANGED_SERVICES"
+              echo "Starting build at $(date)..."
+              
+              # Собираем все сервисы параллельно (BuildKit справится с кешем)
+              # docker-compose build --parallel собирает все сервисы из docker-compose.yml
+              # Если нужно собрать только измененные, собираем их по отдельности, но параллельно через &
+              if [ "$CHANGED_SERVICES" = "auth-service user-service product-service project-service portfolio-service contact-service" ]; then
+                # Если все сервисы изменились, используем --parallel для всех
+                if docker-compose build --parallel; then
+                  echo "✓ All services built successfully at $(date)"
+                  git rev-parse HEAD > .last_deploy_commit
+                else
+                  echo "✗ Parallel build failed, trying sequential build..."
+                  for service in $CHANGED_SERVICES; do
+                    echo "Building $service..."
+                    docker-compose build "$service" || exit 1
+                  done
+                  git rev-parse HEAD > .last_deploy_commit
+                fi
+              else
+                # Если изменились только некоторые сервисы, собираем их параллельно
+                echo "Building changed services in parallel..."
+                PIDS=()
+                for service in $CHANGED_SERVICES; do
+                  echo "Starting build for $service..."
+                  (docker-compose build "$service" && echo "✓ $service built") || (echo "✗ $service failed" && exit 1) &
+                  PIDS+=($!)
+                done
+                
+                # Ждем завершения всех сборок
+                FAILED=0
+                for pid in "${PIDS[@]}"; do
+                  if ! wait "$pid"; then
+                    FAILED=1
+                  fi
+                done
+                
+                if [ $FAILED -eq 0 ]; then
+                  echo "✓ All changed services built successfully at $(date)"
+                  git rev-parse HEAD > .last_deploy_commit
+                else
+                  echo "✗ Some builds failed"
+                  exit 1
+                fi
+              fi
+            else
+              echo "No changes detected, skipping build"
+            fi
+            
+            # Очищаем только неиспользуемые образы (не трогаем кеш)
+            docker image prune -f || true
             
             echo "Build completed at $(date)"
             
             echo "Starting containers..."
             docker-compose up -d
             
+            echo "Waiting for services to be healthy..."
+            sleep 10
+            
             echo "Container status:"
             docker-compose ps
+            
+            echo "Checking service health..."
+            docker-compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"

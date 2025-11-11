@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # Build stage
 FROM golang:1.24-alpine AS builder
 
@@ -9,13 +10,18 @@ RUN apk add --no-cache gcc musl-dev
 
 # Копируем go mod файлы
 COPY go.mod go.sum ./
-RUN go mod download
+
+# Используем BuildKit cache mount для ускорения загрузки зависимостей
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 # Копируем весь код проекта
 COPY . .
 
-# Обновляем зависимости и собираем приложение (CGO нужен для SQLite)
-RUN go mod tidy && CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o contact-service ./cmd/main.go
+# Собираем приложение с использованием кеша для модулей
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 GOOS=linux go build -installsuffix cgo -o contact-service ./cmd/main.go
 
 # Final stage
 FROM alpine:latest

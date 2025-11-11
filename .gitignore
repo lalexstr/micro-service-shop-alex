@@ -61,3 +61,6 @@ contact-service/contact-service
 # portfolio-service/data/
 # contact-service/data/
 
+# Deployment tracking
+.last_deploy_commit
+
