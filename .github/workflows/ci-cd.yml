@@ -282,6 +282,18 @@ jobs:
             set -e
             cd \${DEPLOY_PATH}
             
+            echo "📂 Текущая директория: \$(pwd)"
+            echo "📋 Содержимое директории:"
+            ls -la
+            
+            # Проверяем наличие docker-compose.yml
+            if [ ! -f docker-compose.yml ]; then
+              echo "❌ Файл docker-compose.yml не найден в \$(pwd)"
+              echo "🔍 Поиск docker-compose.yml..."
+              find . -name "docker-compose.yml" -type f 2>/dev/null || echo "Файл не найден"
+              exit 1
+            fi
+            
             # Определяем команду docker compose
             DOCKER_COMPOSE_CMD=""
             if command -v docker-compose &> /dev/null; then
@@ -345,6 +357,14 @@ jobs:
           ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes deploy-server << ENDSSH
             set -e
             cd \${DEPLOY_PATH}
+            
+            echo "📂 Текущая директория: \$(pwd)"
+            
+            # Проверяем наличие docker-compose.yml
+            if [ ! -f docker-compose.yml ]; then
+              echo "❌ Файл docker-compose.yml не найден в \$(pwd)"
+              exit 1
+            fi
             
             # Определяем команду docker compose
             DOCKER_COMPOSE_CMD=""
