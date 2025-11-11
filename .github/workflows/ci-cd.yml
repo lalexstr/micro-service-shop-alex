@@ -153,7 +153,8 @@ jobs:
             docker system df || true
             
             # Останавливаем контейнеры
-            docker-compose down || true
+            # Используем docker compose (v2) вместо docker-compose
+            docker compose down || true
             
             # Включаем BuildKit для ускорения сборки
             export DOCKER_BUILDKIT=1
@@ -200,14 +201,14 @@ jobs:
               # Если нужно собрать только измененные, собираем их по отдельности, но параллельно через &
               if [ "$CHANGED_SERVICES" = "auth-service user-service product-service project-service portfolio-service contact-service" ]; then
                 # Если все сервисы изменились, используем --parallel для всех
-                if docker-compose build --parallel; then
+                if docker compose build --parallel; then
                   echo "✓ All services built successfully at $(date)"
                   git rev-parse HEAD > .last_deploy_commit
                 else
                   echo "✗ Parallel build failed, trying sequential build..."
                   for service in $CHANGED_SERVICES; do
                     echo "Building $service..."
-                    docker-compose build "$service" || exit 1
+                    docker compose build "$service" || exit 1
                   done
                   git rev-parse HEAD > .last_deploy_commit
                 fi
@@ -217,7 +218,7 @@ jobs:
                 PIDS=()
                 for service in $CHANGED_SERVICES; do
                   echo "Starting build for $service..."
-                  (docker-compose build "$service" && echo "✓ $service built") || (echo "✗ $service failed" && exit 1) &
+                  (docker compose build "$service" && echo "✓ $service built") || (echo "✗ $service failed" && exit 1) &
                   PIDS+=($!)
                 done
                 
@@ -247,13 +248,13 @@ jobs:
             echo "Build completed at $(date)"
             
             echo "Starting containers..."
-            docker-compose up -d
+            docker compose up -d
             
             echo "Waiting for services to be healthy..."
             sleep 10
             
             echo "Container status:"
-            docker-compose ps
+            docker compose ps
             
             echo "Checking service health..."
-            docker-compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+            docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
