@@ -132,7 +132,24 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          GITHUB_REPO: ${{ github.repository }}
         run: |
+          # Восстанавливаем SSH настройки
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          
+          cat >> ~/.ssh/config << EOF
+          Host deploy-server
+            HostName ${{ secrets.DEPLOY_HOST }}
+            User ${{ secrets.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+          EOF
+          
+          # Настраиваем SSH agent
           eval $(ssh-agent -s)
           expect << 'EXPECT_SCRIPT'
             set timeout 30
@@ -151,14 +168,36 @@ jobs:
             }
           EXPECT_SCRIPT
           
-          ssh deploy-server << 'ENDSSH'
+          ssh deploy-server << ENDSSH
             set -e
+            
+            # Проверяем наличие git
+            if ! command -v git &> /dev/null; then
+              echo "❌ Git не установлен. Установите git: sudo apt-get install -y git"
+              exit 1
+            fi
+            
+            # Создаем директорию если не существует
+            mkdir -p ${DEPLOY_PATH}
             cd ${DEPLOY_PATH}
             
-            echo "🔄 Обновление кода из репозитория..."
-            git fetch origin
-            git reset --hard origin/master
-            git clean -fd
+            # Проверяем, является ли директория git репозиторием
+            if [ ! -d .git ]; then
+              echo "📦 Клонирование репозитория..."
+              # Если директория существует но не является git репозиторием, удаляем её
+              if [ -d . ]; then
+                cd ..
+                rm -rf $(basename ${DEPLOY_PATH}) || true
+              fi
+              git clone https://github.com/${GITHUB_REPO}.git ${DEPLOY_PATH}
+              cd ${DEPLOY_PATH}
+              git checkout master || git checkout main
+            else
+              echo "🔄 Обновление кода из репозитория..."
+              git fetch origin
+              git reset --hard origin/master || git reset --hard origin/main
+              git clean -fd
+            fi
             
             echo "🛑 Остановка существующих контейнеров..."
             docker-compose down || true
@@ -184,6 +223,22 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
+          # Восстанавливаем SSH настройки
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          
+          cat >> ~/.ssh/config << EOF
+          Host deploy-server
+            HostName ${{ secrets.DEPLOY_HOST }}
+            User ${{ secrets.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+          EOF
+          
+          # Настраиваем SSH agent
           eval $(ssh-agent -s)
           expect << 'EXPECT_SCRIPT'
             set timeout 30
