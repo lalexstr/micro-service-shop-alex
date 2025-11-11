@@ -180,11 +180,19 @@ jobs:
             # Собираем образы (первая сборка может занять 20-30 минут)
             echo "Building Docker images (this may take 20-30 minutes on first run)..."
             echo "Starting build at $(date)..."
-            docker-compose build --progress=plain 2>&1 | tee /tmp/build.log || {
-              echo "Build failed or timed out. Last 50 lines of output:"
-              tail -50 /tmp/build.log || echo "No build log available"
+            
+            # Запускаем сборку с периодическим выводом, чтобы поддерживать SSH соединение
+            docker-compose build 2>&1 | while IFS= read -r line; do
+              echo "$line"
+              # Каждые 100 строк выводим timestamp для поддержания соединения
+              if [ $((++counter % 100)) -eq 0 ]; then
+                echo "[$(date)] Still building... (processed $counter lines)"
+              fi
+            done || {
+              echo "Build failed!"
               exit 1
             }
+            
             echo "Build completed at $(date)"
             
             echo "Starting containers..."
