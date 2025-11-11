@@ -3,124 +3,211 @@ name: CI/CD Pipeline
 on:
   push:
     branches:
-      - master
       - dev
+      - master
   pull_request:
     branches:
-      - master
       - dev
-
-env:
-  DOCKER_BUILDKIT: 1
+      - master
 
 jobs:
+  # Тесты для ветки dev
   test:
-    name: Run Tests
+    if: github.ref == 'refs/heads/dev' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
-      - name: Run tests for all Go services
+          go-version: '1.21'
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Run tests for auth-service
+        working-directory: ./auth-service
         run: |
-          for service in auth-service product-service user-service project-service portfolio-service contact-service; do
-            echo "Running tests for $service..."
-            if [ -f "$service/go.mod" ]; then
-              cd "$service"
-              go mod download
-              go test -v ./... || echo "No tests found or failed in $service"
-              cd ..
-            else
-              echo "No go.mod in $service, skipping"
-            fi
-          done
-        continue-on-error: true
+          go mod download
+          go test -v ./...
 
-  build-and-deploy:
-    name: Build and Deploy
-    runs-on: ubuntu-latest
-    needs: test
+      - name: Run tests for user-service
+        working-directory: ./user-service
+        run: |
+          go mod download
+          go test -v ./...
+
+      - name: Run tests for product-service
+        working-directory: ./product-service
+        run: |
+          go mod download
+          go test -v ./...
+
+      - name: Run tests for project-service
+        working-directory: ./project-service
+        run: |
+          go mod download
+          go test -v ./...
+
+      - name: Run tests for portfolio-service
+        working-directory: ./portfolio-service
+        run: |
+          go mod download
+          go test -v ./...
+
+      - name: Run tests for contact-service
+        working-directory: ./contact-service
+        run: |
+          go mod download
+          go test -v ./...
+
+  # Деплой на сервер для ветки master
+  deploy:
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: []
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Deploy to server via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: 22
-          timeout: 120s
-          command_timeout: 180m
-          script_stop: true
-          debug: true
-          envs: "SSH_CLIENT_ALIVE_INTERVAL=60 SSH_CLIENT_ALIVE_COUNT_MAX=120 GOMAXPROCS=2"
-          script: |
-        set -x
-        DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
-        mkdir -p "$DEPLOY_PATH"
-        cd "$DEPLOY_PATH" || exit 1
-
-        if [ ! -d ".git" ]; then
-          git init
-          git remote add origin https://github.com/${{ github.repository }}.git
-          git fetch origin
-          git checkout -b master origin/master || git checkout master
-        else
-          git fetch origin
-          git reset --hard origin/master
-        fi
-
-        docker compose down || true
-        export DOCKER_BUILDKIT=1
-        export COMPOSE_DOCKER_CLI_BUILD=1
-
-        CURRENT_COMMIT=$(git rev-parse HEAD)
-        CHANGED_SERVICES=""
-
-        if [ ! -f .last_deploy_commit ]; then
-          echo "First deployment — building all services"
-          CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
-        else
-          LAST_COMMIT=$(cat .last_deploy_commit 2>/dev/null || echo "")
-          echo "Last commit: $LAST_COMMIT"
-          echo "Current commit: $CURRENT_COMMIT"
-
-          if [ "$LAST_COMMIT" != "$CURRENT_COMMIT" ]; then
-            for service in auth-service user-service product-service project-service portfolio-service contact-service; do
-              # git diff --quiet возвращает 0 если нет изменений, 1 если есть изменения
-              # Сохраняем код выхода в переменную, чтобы не вызывать ошибку SSH action
-              git diff --quiet "$LAST_COMMIT" HEAD -- "$service/" 2>/dev/null
-              DIFF_EXIT_CODE=$?
-              if [ $DIFF_EXIT_CODE -eq 0 ]; then
-                echo "$service: no changes"
-              else
-                echo "$service: changed"
-                CHANGED_SERVICES="$CHANGED_SERVICES $service"
-              fi
-            done
-          else
-            echo "No changes since last deploy"
-          fi
-        fi
-
-        if [ -z "$CHANGED_SERVICES" ]; then
-          echo "No services changed — skipping build"
-        else
-          echo "Building: $CHANGED_SERVICES"
-          if [ "$CHANGED_SERVICES" = "auth-service user-service product-service project-service portfolio-service contact-service" ]; then
-            docker compose build --parallel || {
-              for s in $CHANGED_SERVICES; do docker compose build "$s" || exit 1; done
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          
+          # Настройка SSH для работы с passphrase
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          
+          # Установка expect для работы с passphrase
+          sudo apt-get update
+          sudo apt-get install -y expect
+          
+          # Настройка SSH agent и добавление ключа с passphrase
+          eval $(ssh-agent -s)
+          
+          # Сохраняем переменные окружения для последующих шагов
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> $GITHUB_ENV
+          
+          # Используем expect для автоматического ввода passphrase
+          expect << 'EXPECT_SCRIPT'
+            set timeout 30
+            spawn ssh-add ~/.ssh/deploy_key
+            expect {
+              "Enter passphrase" {
+                send -- "${{ secrets.DEPLOY_SSH_PASSPHRASE }}\r"
+                exp_continue
+              }
+              "Identity added" {
+                exit 0
+              }
+              eof {
+                exit 0
+              }
             }
-          else
-            for s in $CHANGED_SERVICES; do docker compose build "$s" || exit 1; done
-          fi
-          echo "$CURRENT_COMMIT" > .last_deploy_commit
-        fi
+          EXPECT_SCRIPT
+          
+          # Настройка SSH config
+          cat >> ~/.ssh/config << EOF
+          Host deploy-server
+            HostName ${{ secrets.DEPLOY_HOST }}
+            User ${{ secrets.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+          EOF
 
-        docker image prune -f || true
-        docker compose up -d
-        sleep 10
-        docker compose ps
+      - name: Deploy to server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          eval $(ssh-agent -s)
+          expect << 'EXPECT_SCRIPT'
+            set timeout 30
+            spawn ssh-add ~/.ssh/deploy_key
+            expect {
+              "Enter passphrase" {
+                send -- "${{ secrets.DEPLOY_SSH_PASSPHRASE }}\r"
+                exp_continue
+              }
+              "Identity added" {
+                exit 0
+              }
+              eof {
+                exit 0
+              }
+            }
+          EXPECT_SCRIPT
+          
+          ssh deploy-server << 'ENDSSH'
+            set -e
+            cd ${DEPLOY_PATH}
+            
+            echo "🔄 Обновление кода из репозитория..."
+            git fetch origin
+            git reset --hard origin/master
+            git clean -fd
+            
+            echo "🛑 Остановка существующих контейнеров..."
+            docker-compose down || true
+            
+            echo "🔨 Сборка Docker образов..."
+            docker-compose build --no-cache
+            
+            echo "🚀 Запуск всех микросервисов..."
+            docker-compose up -d
+            
+            echo "⏳ Ожидание запуска сервисов..."
+            sleep 15
+            
+            echo "📊 Статус контейнеров:"
+            docker-compose ps
+            
+            echo "✅ Деплой завершен успешно!"
+          ENDSSH
+
+      - name: Verify deployment
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          eval $(ssh-agent -s)
+          expect << 'EXPECT_SCRIPT'
+            set timeout 30
+            spawn ssh-add ~/.ssh/deploy_key
+            expect {
+              "Enter passphrase" {
+                send -- "${{ secrets.DEPLOY_SSH_PASSPHRASE }}\r"
+                exp_continue
+              }
+              "Identity added" {
+                exit 0
+              }
+              eof {
+                exit 0
+              }
+            }
+          EXPECT_SCRIPT
+          
+          ssh deploy-server << 'ENDSSH'
+            cd ${DEPLOY_PATH}
+            echo "🔍 Проверка статуса сервисов..."
+            docker-compose ps
+            echo ""
+            echo "📋 Проверка health checks..."
+            docker-compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+          ENDSSH
+
