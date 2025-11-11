@@ -119,6 +119,9 @@ jobs:
             SSH_CLIENT_ALIVE_COUNT_MAX=120
             GOMAXPROCS=2
           script: |
+            set -x  # Вывод команд для отладки
+            # Не используем set -e, чтобы команды с || true работали корректно
+            
             DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
             if [ -z "$DEPLOY_PATH" ]; then
               echo "Error: DEPLOY_PATH is not set in GitHub Secrets"
@@ -167,10 +170,15 @@ jobs:
             
             # Проверяем, есть ли изменения в коде (оптимизация)
             echo "Checking for code changes..."
+            echo "Current commit: $(git rev-parse HEAD)"
             CHANGED_SERVICES=""
+            
             if [ -f ".last_deploy_commit" ]; then
               LAST_COMMIT=$(cat .last_deploy_commit)
               CURRENT_COMMIT=$(git rev-parse HEAD)
+              echo "Last deploy commit: $LAST_COMMIT"
+              echo "Current commit: $CURRENT_COMMIT"
+              
               if [ "$LAST_COMMIT" != "$CURRENT_COMMIT" ]; then
                 echo "Code changed, will rebuild all services"
                 CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
@@ -190,6 +198,8 @@ jobs:
               echo "First deployment, will build all services"
               CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
             fi
+            
+            echo "Changed services: $CHANGED_SERVICES"
             
             # Собираем только измененные сервисы или все, если это первый деплой
             if [ -n "$CHANGED_SERVICES" ]; then
