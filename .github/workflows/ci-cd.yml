@@ -57,10 +57,7 @@ steps:
       command_timeout: 180m
       script_stop: true
       debug: true
-      envs: |
-        SSH_CLIENT_ALIVE_INTERVAL=60
-        SSH_CLIENT_ALIVE_COUNT_MAX=120
-        GOMAXPROCS=2
+      envs: "SSH_CLIENT_ALIVE_INTERVAL=60 SSH_CLIENT_ALIVE_COUNT_MAX=120 GOMAXPROCS=2"
       script: |
         set -x
         DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
