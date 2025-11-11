@@ -232,15 +232,125 @@ jobs:
             
             echo "🛑 Остановка существующих контейнеров..."
             \$DOCKER_COMPOSE_CMD down || true
+          ENDSSH
+          
+      - name: Build Docker images
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          # Восстанавливаем SSH настройки
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          
+          cat >> ~/.ssh/config << EOF
+          Host deploy-server
+            HostName ${{ secrets.DEPLOY_HOST }}
+            User ${{ secrets.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ServerAliveInterval 60
+            ServerAliveCountMax 30
+            TCPKeepAlive yes
+            ConnectTimeout 30
+          EOF
+          
+          # Настраиваем SSH agent
+          eval $(ssh-agent -s)
+          expect << 'EXPECT_SCRIPT'
+            set timeout 30
+            spawn ssh-add ~/.ssh/deploy_key
+            expect {
+              "Enter passphrase" {
+                send -- "${{ secrets.DEPLOY_SSH_PASSPHRASE }}\r"
+                exp_continue
+              }
+              "Identity added" {
+                exit 0
+              }
+              eof {
+                exit 0
+              }
+            }
+          EXPECT_SCRIPT
+          
+          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes deploy-server << 'ENDSSH'
+            cd ${DEPLOY_PATH}
+            
+            # Определяем команду docker compose
+            if command -v docker-compose &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker-compose"
+            elif docker compose version &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker compose"
+            else
+              echo "❌ Docker Compose не найден"
+              exit 1
+            fi
             
             echo "🔨 Сборка Docker образов..."
-            # Используем nohup для предотвращения разрыва соединения при долгой сборке
-            # И перенаправляем вывод в файл для мониторинга
-            \$DOCKER_COMPOSE_CMD build --no-cache 2>&1 | tee /tmp/docker-build.log || {
-              echo "❌ Ошибка при сборке образов. Последние строки лога:"
-              tail -50 /tmp/docker-build.log
-              exit 1
+            \$DOCKER_COMPOSE_CMD build --no-cache
+          ENDSSH
+          
+      - name: Start services
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          # Восстанавливаем SSH настройки
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          
+          cat >> ~/.ssh/config << EOF
+          Host deploy-server
+            HostName ${{ secrets.DEPLOY_HOST }}
+            User ${{ secrets.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ServerAliveInterval 60
+            ServerAliveCountMax 30
+            TCPKeepAlive yes
+            ConnectTimeout 30
+          EOF
+          
+          # Настраиваем SSH agent
+          eval $(ssh-agent -s)
+          expect << 'EXPECT_SCRIPT'
+            set timeout 30
+            spawn ssh-add ~/.ssh/deploy_key
+            expect {
+              "Enter passphrase" {
+                send -- "${{ secrets.DEPLOY_SSH_PASSPHRASE }}\r"
+                exp_continue
+              }
+              "Identity added" {
+                exit 0
+              }
+              eof {
+                exit 0
+              }
             }
+          EXPECT_SCRIPT
+          
+          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes deploy-server << 'ENDSSH'
+            cd ${DEPLOY_PATH}
+            
+            # Определяем команду docker compose
+            if command -v docker-compose &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker-compose"
+            elif docker compose version &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker compose"
+            else
+              echo "❌ Docker Compose не найден"
+              exit 1
+            fi
             
             echo "🚀 Запуск всех микросервисов..."
             \$DOCKER_COMPOSE_CMD up -d
