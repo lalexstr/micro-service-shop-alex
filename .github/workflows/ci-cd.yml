@@ -171,10 +171,36 @@ jobs:
           ssh deploy-server << ENDSSH
             set -e
             
+            # Функция для определения команды docker compose
+            DOCKER_COMPOSE_CMD=""
+            if command -v docker-compose &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker-compose"
+            elif docker compose version &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker compose"
+            else
+              echo "❌ Docker Compose не найден. Устанавливаю..."
+              # Устанавливаем Docker если не установлен
+              if ! command -v docker &> /dev/null; then
+                echo "📦 Установка Docker..."
+                curl -fsSL https://get.docker.com -o get-docker.sh
+                sudo sh get-docker.sh
+                sudo usermod -aG docker $USER || true
+                rm get-docker.sh
+              fi
+              # Устанавливаем Docker Compose
+              echo "📦 Установка Docker Compose..."
+              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+              DOCKER_COMPOSE_CMD="docker-compose"
+            fi
+            
+            echo "✅ Используется команда: \$DOCKER_COMPOSE_CMD"
+            
             # Проверяем наличие git
             if ! command -v git &> /dev/null; then
-              echo "❌ Git не установлен. Установите git: sudo apt-get install -y git"
-              exit 1
+              echo "❌ Git не установлен. Устанавливаю git..."
+              sudo apt-get update
+              sudo apt-get install -y git
             fi
             
             # Создаем директорию если не существует
@@ -200,19 +226,19 @@ jobs:
             fi
             
             echo "🛑 Остановка существующих контейнеров..."
-            docker-compose down || true
+            \$DOCKER_COMPOSE_CMD down || true
             
             echo "🔨 Сборка Docker образов..."
-            docker-compose build --no-cache
+            \$DOCKER_COMPOSE_CMD build --no-cache
             
             echo "🚀 Запуск всех микросервисов..."
-            docker-compose up -d
+            \$DOCKER_COMPOSE_CMD up -d
             
             echo "⏳ Ожидание запуска сервисов..."
             sleep 15
             
             echo "📊 Статус контейнеров:"
-            docker-compose ps
+            \$DOCKER_COMPOSE_CMD ps
             
             echo "✅ Деплой завершен успешно!"
           ENDSSH
@@ -259,10 +285,21 @@ jobs:
           
           ssh deploy-server << 'ENDSSH'
             cd ${DEPLOY_PATH}
+            
+            # Определяем команду docker compose
+            if command -v docker-compose &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker-compose"
+            elif docker compose version &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker compose"
+            else
+              echo "❌ Docker Compose не найден"
+              exit 1
+            fi
+            
             echo "🔍 Проверка статуса сервисов..."
-            docker-compose ps
+            \$DOCKER_COMPOSE_CMD ps
             echo ""
             echo "📋 Проверка health checks..."
-            docker-compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+            \$DOCKER_COMPOSE_CMD ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
           ENDSSH
 
