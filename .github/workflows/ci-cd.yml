@@ -146,6 +146,7 @@ jobs:
           port: 22
           timeout: 30s
           command_timeout: 60m
+          envs: SSH_CLIENT_ALIVE_INTERVAL=60,SSH_CLIENT_ALIVE_COUNT_MAX=30
           script: |
             DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
             if [ -z "$DEPLOY_PATH" ]; then
@@ -178,7 +179,13 @@ jobs:
             
             # Собираем образы (первая сборка может занять 20-30 минут)
             echo "Building Docker images (this may take 20-30 minutes on first run)..."
-            docker-compose build
+            echo "Starting build at $(date)..."
+            docker-compose build --progress=plain 2>&1 | tee /tmp/build.log || {
+              echo "Build failed or timed out. Last 50 lines of output:"
+              tail -50 /tmp/build.log || echo "No build log available"
+              exit 1
+            }
+            echo "Build completed at $(date)"
             
             echo "Starting containers..."
             docker-compose up -d
