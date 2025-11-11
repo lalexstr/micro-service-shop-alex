@@ -183,12 +183,12 @@ jobs:
               fi
             fi
             
-            # Используем конструкцию, которая всегда возвращает успех
+            # Используем простую проверку с обработкой ошибок
             # Проверяем наличие LAST_COMMIT и обрабатываем оба случая
             if [ -n "$LAST_COMMIT" ] || [ -z "$LAST_COMMIT" ]; then
-              # Внутренняя проверка с оберткой для предотвращения ошибки
-              if [ -n "$LAST_COMMIT" ] || true; then
-                if [ -n "$LAST_COMMIT" ]; then
+              # Используем test с || true чтобы всегда возвращать успех
+              if test -n "$LAST_COMMIT" || true; then
+                if test -n "$LAST_COMMIT"; then
                   CURRENT_COMMIT=$(git rev-parse HEAD)
                   echo "Last deploy commit: $LAST_COMMIT"
                   echo "Current commit: $CURRENT_COMMIT"
