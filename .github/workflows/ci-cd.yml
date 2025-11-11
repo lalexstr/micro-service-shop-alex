@@ -1,292 +1,124 @@
 name: CI/CD Pipeline
 
 on:
-  push:
-    branches:
-      - master
-      - dev
-  pull_request:
-    branches:
-      - master
-      - dev
+push:
+branches:
+- master
+- dev
+pull_request:
+branches:
+- master
+- dev
 
 env:
-  DOCKER_BUILDKIT: 1
+DOCKER_BUILDKIT: 1
 
 jobs:
-  # Тесты для всех веток
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+test:
+name: Run Tests
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v4
+- uses: actions/setup-go@v5
+with:
+go-version: '1.24'
+- name: Run tests for all Go services
+run: |
+for service in auth-service product-service user-service project-service portfolio-service contact-service; do
+echo "Running tests for $service..."
+if [ -f "$service/go.mod" ]; then
+cd "$service"
+go mod download
+go test -v ./... || echo "No tests found or failed in $service"
+cd ..
+else
+echo "No go.mod in $service, skipping"
+fi
+done
+continue-on-error: true
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
+build-and-deploy:
+name: Build and Deploy
+runs-on: ubuntu-latest
+needs: test
+if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+steps:
+- uses: actions/checkout@v4
 
-      - name: Run tests for auth-service
-        working-directory: ./auth-service
-        run: |
-          if [ -f go.mod ]; then
-            go mod download
-            go test -v ./... || echo "No tests found or tests failed"
-          else
-            echo "No go.mod found, skipping tests"
-          fi
-        continue-on-error: true
+```
+  - name: Deploy to server via SSH
+    uses: appleboy/ssh-action@v1.2.0
+    with:
+      host: ${{ secrets.DEPLOY_HOST }}
+      username: ${{ secrets.DEPLOY_USER }}
+      key: ${{ secrets.DEPLOY_SSH_KEY }}
+      port: 22
+      timeout: 120s
+      command_timeout: 180m
+      script_stop: true
+      debug: true
+      envs: SSH_CLIENT_ALIVE_INTERVAL=60,SSH_CLIENT_ALIVE_COUNT_MAX=120,GOMAXPROCS=2
+      script: |
+        set -x
+        DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+        mkdir -p "$DEPLOY_PATH"
+        cd "$DEPLOY_PATH" || exit 1
 
-      - name: Run tests for product-service
-        working-directory: ./product-service
-        run: |
-          if [ -f go.mod ]; then
-            go mod download
-            go test -v ./... || echo "No tests found or tests failed"
-          else
-            echo "No go.mod found, skipping tests"
-          fi
-        continue-on-error: true
+        if [ ! -d ".git" ]; then
+          git init
+          git remote add origin https://github.com/${{ github.repository }}.git
+          git fetch origin
+          git checkout -b master origin/master || git checkout master
+        else
+          git fetch origin
+          git reset --hard origin/master
+        fi
 
-      - name: Run tests for user-service
-        working-directory: ./user-service
-        run: |
-          if [ -f go.mod ]; then
-            go mod download
-            go test -v ./... || echo "No tests found or tests failed"
-          else
-            echo "No go.mod found, skipping tests"
-          fi
-        continue-on-error: true
+        docker compose down || true
+        export DOCKER_BUILDKIT=1
+        export COMPOSE_DOCKER_CLI_BUILD=1
 
-      - name: Run tests for project-service
-        working-directory: ./project-service
-        run: |
-          if [ -f go.mod ]; then
-            go mod download
-            go test -v ./... || echo "No tests found or tests failed"
-          else
-            echo "No go.mod found, skipping tests"
-          fi
-        continue-on-error: true
+        CURRENT_COMMIT=$(git rev-parse HEAD)
+        CHANGED_SERVICES=""
 
-      - name: Run tests for portfolio-service
-        working-directory: ./portfolio-service
-        run: |
-          if [ -f go.mod ]; then
-            go mod download
-            go test -v ./... || echo "No tests found or tests failed"
-          else
-            echo "No go.mod found, skipping tests"
-          fi
-        continue-on-error: true
+        if [ ! -f .last_deploy_commit ]; then
+          echo "First deployment — building all services"
+          CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
+        else
+          LAST_COMMIT=$(cat .last_deploy_commit 2>/dev/null || echo "")
+          echo "Last commit: $LAST_COMMIT"
+          echo "Current commit: $CURRENT_COMMIT"
 
-      - name: Run tests for contact-service
-        working-directory: ./contact-service
-        run: |
-          if [ -f go.mod ]; then
-            go mod download
-            go test -v ./... || echo "No tests found or tests failed"
-          else
-            echo "No go.mod found, skipping tests"
-          fi
-        continue-on-error: true
-
-  # Сборка Docker образов и деплой только для master ветки
-  build-and-deploy:
-    name: Build and Deploy
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: 22
-          timeout: 120s
-          command_timeout: 180m
-          script_stop: true
-          debug: true
-          envs: |
-            SSH_CLIENT_ALIVE_INTERVAL=60
-            SSH_CLIENT_ALIVE_COUNT_MAX=120
-            GOMAXPROCS=2
-          script: |
-            set -x  # Вывод команд для отладки
-            # Не используем set -e, чтобы команды с || true работали корректно
-            
-            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
-            if [ -z "$DEPLOY_PATH" ]; then
-              echo "Error: DEPLOY_PATH is not set in GitHub Secrets"
-              exit 1
-            fi
-            
-            # Создаем директорию, если её нет
-            if [ ! -d "$DEPLOY_PATH" ]; then
-              echo "Creating directory $DEPLOY_PATH..."
-              mkdir -p "$DEPLOY_PATH"
-            fi
-            
-            cd "$DEPLOY_PATH" || exit 1
-            
-            # Инициализируем git репозиторий, если его нет
-            if [ ! -d ".git" ]; then
-              echo "Initializing git repository..."
-              git init
-              git remote add origin https://github.com/${{ github.repository }}.git || git remote set-url origin https://github.com/${{ github.repository }}.git
-              git fetch origin
-              git checkout -b master origin/master || git checkout master
-            fi
-            
-            # Обновляем код
-            git pull origin master || git fetch origin && git reset --hard origin/master
-            
-            # Проверяем доступную память и место на диске
-            echo "System resources:"
-            free -h || echo "free command not available"
-            df -h / || echo "df command not available"
-            echo "Docker system info:"
-            docker system df || true
-            
-            # Останавливаем контейнеры
-            # Используем docker compose (v2) вместо docker-compose
-            docker compose down || true
-            
-            # Включаем BuildKit для ускорения сборки
-            export DOCKER_BUILDKIT=1
-            export COMPOSE_DOCKER_CLI_BUILD=1
-            
-            # Убеждаемся, что BuildKit включен в Docker daemon
-            if ! docker buildx version > /dev/null 2>&1; then
-              echo "BuildKit not available, but continuing..."
-            fi
-            
-            # Проверяем, есть ли изменения в коде (оптимизация)
-            echo "Checking for code changes..."
-            echo "Current commit: $(git rev-parse HEAD)"
-            CHANGED_SERVICES=""
-            
-            # Проверяем наличие файла с последним коммитом
-            # Пробуем прочитать файл, если не получается - это первый деплой
-            # Используем конструкцию, которая всегда возвращает успех
-            LAST_COMMIT=""
-            if [ -f ".last_deploy_commit" ] 2>/dev/null || [ ! -f ".last_deploy_commit" ] 2>/dev/null; then
-              if [ -f ".last_deploy_commit" ] 2>/dev/null; then
-                LAST_COMMIT=$(cat .last_deploy_commit 2>/dev/null || echo "")
-              fi
-            fi
-            
-            # Используем простую проверку с обработкой ошибок
-            # Проверяем наличие LAST_COMMIT и обрабатываем оба случая
-            if [ -n "$LAST_COMMIT" ] || [ -z "$LAST_COMMIT" ]; then
-              # Используем test с || true чтобы всегда возвращать успех
-              if test -n "$LAST_COMMIT" || true; then
-                # Внутренняя проверка тоже с || true
-                if test -n "$LAST_COMMIT" || true; then
-                  if test -n "$LAST_COMMIT"; then
-                  CURRENT_COMMIT=$(git rev-parse HEAD)
-                  echo "Last deploy commit: $LAST_COMMIT"
-                  echo "Current commit: $CURRENT_COMMIT"
-                  
-                  if [ "$LAST_COMMIT" != "$CURRENT_COMMIT" ]; then
-                    echo "Code changed, will rebuild all services"
-                    CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
-                  else
-                    echo "No code changes detected, checking individual services..."
-                    # Проверяем изменения в каждом сервисе
-                    for service in auth-service user-service product-service project-service portfolio-service contact-service; do
-                      if git diff --quiet "$LAST_COMMIT" HEAD -- "$service/" 2>/dev/null; then
-                        echo "  $service: no changes"
-                      else
-                        echo "  $service: changed"
-                        CHANGED_SERVICES="$CHANGED_SERVICES $service"
-                      fi
-                    done
-                  fi
-                  else
-                    echo "First deployment, will build all services"
-                    CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
-                  fi
-                fi
-              fi
-            else
-              echo "First deployment, will build all services"
-              CHANGED_SERVICES="auth-service user-service product-service project-service portfolio-service contact-service"
-            fi
-            
-            echo "Changed services: $CHANGED_SERVICES"
-            
-            # Собираем только измененные сервисы или все, если это первый деплой
-            if [ -n "$CHANGED_SERVICES" ]; then
-              echo "Building services: $CHANGED_SERVICES"
-              echo "Starting build at $(date)..."
-              
-              # Собираем все сервисы параллельно (BuildKit справится с кешем)
-              # docker-compose build --parallel собирает все сервисы из docker-compose.yml
-              # Если нужно собрать только измененные, собираем их по отдельности, но параллельно через &
-              if [ "$CHANGED_SERVICES" = "auth-service user-service product-service project-service portfolio-service contact-service" ]; then
-                # Если все сервисы изменились, используем --parallel для всех
-                if docker compose build --parallel; then
-                  echo "✓ All services built successfully at $(date)"
-                  git rev-parse HEAD > .last_deploy_commit
-                else
-                  echo "✗ Parallel build failed, trying sequential build..."
-                  for service in $CHANGED_SERVICES; do
-                    echo "Building $service..."
-                    docker compose build "$service" || exit 1
-                  done
-                  git rev-parse HEAD > .last_deploy_commit
-                fi
+          if [ "$LAST_COMMIT" != "$CURRENT_COMMIT" ]; then
+            for service in auth-service user-service product-service project-service portfolio-service contact-service; do
+              if git diff --quiet "$LAST_COMMIT" HEAD -- "$service/"; then
+                echo "$service: no changes"
               else
-                # Если изменились только некоторые сервисы, собираем их параллельно
-                echo "Building changed services in parallel..."
-                PIDS=()
-                for service in $CHANGED_SERVICES; do
-                  echo "Starting build for $service..."
-                  (docker compose build "$service" && echo "✓ $service built") || (echo "✗ $service failed" && exit 1) &
-                  PIDS+=($!)
-                done
-                
-                # Ждем завершения всех сборок
-                FAILED=0
-                for pid in "${PIDS[@]}"; do
-                  if ! wait "$pid"; then
-                    FAILED=1
-                  fi
-                done
-                
-                if [ $FAILED -eq 0 ]; then
-                  echo "✓ All changed services built successfully at $(date)"
-                  git rev-parse HEAD > .last_deploy_commit
-                else
-                  echo "✗ Some builds failed"
-                  exit 1
-                fi
+                echo "$service: changed"
+                CHANGED_SERVICES="$CHANGED_SERVICES $service"
               fi
-            else
-              echo "No changes detected, skipping build"
-            fi
-            
-            # Очищаем только неиспользуемые образы (не трогаем кеш)
-            docker image prune -f || true
-            
-            echo "Build completed at $(date)"
-            
-            echo "Starting containers..."
-            docker compose up -d
-            
-            echo "Waiting for services to be healthy..."
-            sleep 10
-            
-            echo "Container status:"
-            docker compose ps
-            
-            echo "Checking service health..."
-            docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+            done
+          else
+            echo "No changes since last deploy"
+          fi
+        fi
+
+        if [ -z "$CHANGED_SERVICES" ]; then
+          echo "No services changed — skipping build"
+        else
+          echo "Building: $CHANGED_SERVICES"
+          if [ "$CHANGED_SERVICES" = "auth-service user-service product-service project-service portfolio-service contact-service" ]; then
+            docker compose build --parallel || {
+              for s in $CHANGED_SERVICES; do docker compose build "$s" || exit 1; done
+            }
+          else
+            for s in $CHANGED_SERVICES; do docker compose build "$s" || exit 1; done
+          fi
+          echo "$CURRENT_COMMIT" > .last_deploy_commit
+        fi
+
+        docker image prune -f || true
+        docker compose up -d
+        sleep 10
+        docker compose ps
+```
