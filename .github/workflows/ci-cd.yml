@@ -358,7 +358,8 @@ jobs:
             
             for SERVICE in "${SERVICES[@]}"; do
               echo "📦 Сборка ${SERVICE}..."
-              ${DOCKER_COMPOSE_CMD} build --no-cache --progress=plain ${SERVICE} 2>&1 | tee /tmp/docker-build-${SERVICE}.log || {
+              # Используем --pull чтобы обновить базовые образы и --no-cache для полной пересборки
+              ${DOCKER_COMPOSE_CMD} build --pull --no-cache --progress=plain ${SERVICE} 2>&1 | tee /tmp/docker-build-${SERVICE}.log || {
                 echo "❌ Ошибка сборки ${SERVICE}. Последние строки лога:"
                 tail -50 /tmp/docker-build-${SERVICE}.log
                 exit 1
