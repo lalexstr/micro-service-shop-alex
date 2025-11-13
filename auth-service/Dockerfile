@@ -15,8 +15,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # Копируем весь код проекта
 COPY . .
 
+# Обновляем go.mod и go.sum
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod tidy
+
 # Собираем приложение с использованием кеша для модулей
-# Убираем go mod tidy - он не нужен при каждой сборке
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=1 GOOS=linux go build -installsuffix cgo -o auth-service ./main.go

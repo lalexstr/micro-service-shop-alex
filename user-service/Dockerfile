@@ -15,6 +15,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # Копируем весь код проекта
 COPY . .
 
+# Обновляем go.mod и go.sum
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod tidy
+
 # Собираем приложение с использованием кеша для модулей
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
