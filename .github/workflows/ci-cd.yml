@@ -298,6 +298,11 @@ jobs:
               git clone https://github.com/${GITHUB_REPO}.git ${DEPLOY_PATH}
               cd ${DEPLOY_PATH}
               git checkout master || git checkout main
+            else
+              echo "🔄 Обновление кода из репозитория перед сборкой..."
+              git fetch origin
+              git reset --hard origin/master || git reset --hard origin/main
+              git clean -fd
             fi
             
             # Проверяем наличие docker-compose.yml
